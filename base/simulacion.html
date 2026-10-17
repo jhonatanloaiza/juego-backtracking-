@@ -1,0 +1,385 @@
+<title>El Laberinto del Fantasma</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&display=swap">
+<style>
+/* Layout: una columna centrada; el lienzo 920×740 de la spec escala al ancho disponible. Tema claro único y deliberado (tablero blanco por spec). */
+:root {
+  --bg: #f3f1f8; --panel: #ffffff; --ink: #1d1a26; --muted: #5d5870;
+  --ghost: #8c3cc8; --hero: #1e5adc; --line: #d9d4e6;
+  --display: "Fredoka", "Trebuchet MS", system-ui, sans-serif;
+  --body: system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: light;
+}
+html, body { background: var(--bg); color: var(--ink); }
+body { font-family: var(--body); padding-block: 20px 32px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.wrap { max-width: 920px; margin: 0 auto; display: grid; gap: 14px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; }
+h1 { font-family: var(--display); font-weight: 600; font-size: 1.7rem; margin: 0; text-wrap: balance; }
+h1 span { color: var(--ghost); }
+.tag { font-size: .8rem; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
+canvas { width: 100%; max-width: 100%; height: auto; aspect-ratio: 920 / 740; display: block; background: #fff; border: 1px solid var(--line); border-radius: 6px; outline: none; }
+canvas:focus-visible { box-shadow: 0 0 0 3px var(--hero); }
+.ctrl { display: flex; flex-wrap: wrap; gap: 8px; }
+.ctrl button { font: 600 .9rem var(--display); padding: 8px 12px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 6px; cursor: pointer; min-width: 44px; }
+.ctrl button:hover { border-color: var(--muted); }
+.ctrl button:focus-visible { outline: 3px solid var(--hero); outline-offset: 1px; }
+.ctrl .main { background: var(--hero); border-color: var(--hero); color: #fff; }
+.ctrl .main kbd { background: transparent; color: #fff; border-color: rgba(255,255,255,.6); }
+.ctrl .sep { width: 1px; background: var(--line); margin: 0 4px; }
+.nota { font-size: .85rem; color: var(--muted); line-height: 1.5; max-width: 70ch; margin: 0; }
+kbd { font: .8rem ui-monospace, monospace; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: var(--panel); }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>El Laberinto del <span>Fantasma</span></h1>
+    <div class="tag">Simulación · SPEC-LAB-001 v1.2</div>
+  </header>
+  <canvas id="lienzo" width="920" height="740" tabindex="0" aria-label="Tablero del juego"></canvas>
+  <div class="ctrl" aria-label="Controles">
+    <button class="main" data-k="Enter">Comenzar / Terminar turno <kbd>Enter</kbd></button>
+    <button class="main" data-k=" ">Tirar dado <kbd>Espacio</kbd></button>
+    <button data-k="ArrowLeft" aria-label="Izquierda">←</button>
+    <button data-k="ArrowUp" aria-label="Arriba">↑</button>
+    <button data-k="ArrowDown" aria-label="Abajo">↓</button>
+    <button data-k="ArrowRight" aria-label="Derecha">→</button>
+    <span class="sep"></span>
+    <button data-k="p">Pausa <kbd>P</kbd></button>
+    <button data-k="n">Paso <kbd>N</kbd></button>
+    <button data-k="s">Saltar <kbd>S</kbd></button>
+    <button data-k="-">− vel</button>
+    <button data-k="+">+ vel</button>
+    <span class="sep"></span>
+    <button data-k="g">Origen <kbd>G</kbd></button>
+    <button data-k="v">Visualizador <kbd>V</kbd></button>
+    <button data-k="r">Reiniciar <kbd>R</kbd></button>
+    <button data-k="m">Menú <kbd>M</kbd></button>
+  </div>
+  <p class="nota">Prototipo visual para validar la spec antes de escribir el código Python. Si algo aquí no coincide con <code>SPEC.md</code>, manda la spec. Haz clic en el tablero para usar el teclado.</p>
+</div>
+
+<script>
+const PREDEF = [{"id": 1, "nombre": "Backtracking", "grid": ["###############################", "    #       #       #         #", "### # ##### # ####### ####### #", "#   #     # #         #     # #", "# ### ### # ########### ### # #", "#   # #   #   #         #   # #", "### ### ##### # ######### ### #", "#   #   #   # #   #           #", "# ### ### # # ### # ######### #", "# #   #   # #   # # #   #     #", "# # ### # ##### # ### # # #####", "#   #   # #     # #   # #   # #", "##### ### # ##### # ### ### # #", "#     #   # #     # #   #     #", "##### ##### ### # # # ####### #", "#     #   #   # # # #     #   #", "# # ### # ### # # # ##### #####", "# # #   #     # #   #   #     #", "# ### ############### # # ### #", "#   #   #             # # # # #", "# # ### # ############# # # # #", "# #     #         #   # #   # #", "# ########### ### # # # ##### #", "# #   #     # # # # # #     # #", "# # # # # # # # # # # ##### # #", "# # # # # # #   # # # #   # # #", "# # # ### # ##### # # # # # # #", "# # #     # #     # #   # #   #", "# # ####### # ##### ##### ### #", "#   #         #         #      ", "###############################"]}, {"id": 2, "nombre": "Prim", "grid": ["###############################", "                  #   # #   # #", "# ### ### # # # ##### # ### # #", "# #   #   # # #     # #     # #", "# ### ### ##### ##### # ##### #", "# #     #     #     #     #   #", "# # # # # # ########### ### ###", "# # # # # #                   #", "# ### # ##### ##### # ### #####", "#   # #   # #     # # # #     #", "# ### # # # ### ####### ##### #", "# #   # #     #             # #", "# # # ##### # # # ### # ### ###", "# # #   #   # # # #   #   #   #", "# ### ### # ### ##### ### # ###", "#   #   # #   #     #   # #   #", "# # # ##### # ##### ### ### # #", "# # #   #   #     #   #   # # #", "# # ##### # ########### # # # #", "# #     # #           # # # # #", "# ######### ### ### ### ### ###", "#   #   #   #   #     #   # # #", "# ##### # # ### ### # # # ### #", "#       # #   #   # # # #     #", "# # ### ### ### # # ### #######", "# #   #   #   # # # # #       #", "# # ### # # # # ##### # ### ###", "# #   # # # # #   #       #   #", "# # ####### # # # ### # # ### #", "# #       # # # #   # # #   #  ", "###############################"]}, {"id": 3, "nombre": "Kruskal", "grid": ["###############################", "    #   #       #     #       #", "# # ### ### # ### ### # ### ###", "# # #   # # #     # #   # #   #", "### # ### ### # ### ##### ### #", "#   #   #     #             # #", "### # ### # # ####### ####### #", "#     #   # #     # #   # # # #", "# ##### ##### ### # ### # # # #", "#       # # # # #   #     #   #", "### # ### # # # ##### #########", "#   # # #   # #         #     #", "####### ### ### # ####### #####", "#             # #       # #   #", "# # ############# ### ### # # #", "# #     #     #   #   # #   # #", "### ####### ### ####### ##### #", "#     #       # #   #       # #", "##### ####### # # ### ####### #", "# # #           # # #       # #", "# # ### # # ### # # # ### ### #", "# #   # # # #         # #     #", "# # ######### # ####### ### # #", "#     # # #   # #     #     # #", "### ### # ### # # ### # #######", "#       # #   # #   #         #", "####### # # # # ########### # #", "#       #   # #     #   # # # #", "##### # ### # ##### # # # # ###", "#     #     #     #   # #      ", "###############################"]}, {"id": 4, "nombre": "Árbol binario", "grid": ["###############################", "                              #", "# # ### # # # ### ##### ##### #", "# #   # # # #   #     #     # #", "# # ### # # ##### #############", "# #   # # #     #             #", "# ######### # # # # ##### ### #", "#         # # # # #     #   # #", "# # ### ##### ########### # ###", "# #   #     #           # #   #", "# # ### ### ####### ### #######", "# #   #   #       #   #       #", "# ######### # ######### ##### #", "#         # #         #     # #", "# # # # ####### ### ### # # # #", "# # # #       #   #   # # # # #", "# ### ##### ### ##### # # ### #", "#   #     #   #     # # #   # #", "# ### # # ##### # # ### # #####", "#   # # #     # # #   # #     #", "# ### # # ##### ##### ####### #", "#   # # #     #     #       # #", "# ### ### ### ### ### # # #####", "#   #   #   #   #   # # #     #", "# # # ### ### ######### # #####", "# # #   #   #         # #     #", "# ########### ### ######### # #", "#           #   #         # # #", "# # ##### ########### #########", "# #     #           #          ", "###############################"]}, {"id": 5, "nombre": "Sidewinder", "grid": ["###############################", "                              #", "### # ### ### # ### # # # # # #", "#   # #     # #   # # # # # # #", "# # ####### # ####### ### ### #", "# #       # #   #     #     # #", "### ### ##### # ##### # # ### #", "#     #     # # #     # # #   #", "# ### # ### # ##### # ##### # #", "#   # #   # #     # # #     # #", "# # # # ### # ######### # ### #", "# # # #   # #     #     #   # #", "# ### ### ### ##### # # # # # #", "#   #   #   #   #   # # # # # #", "# ### # ### ### # # ###########", "# #   # #     # # #           #", "# ### # ### ############# #####", "# #   # #   #                 #", "# # ### ### ##### # # # # # # #", "# #   #   #     # # # # # # # #", "### ##### ### # ##### ####### #", "#     #   #   # #           # #", "# ######### ### ### ### ### ###", "#       #     # #     # #     #", "### ### # ######### ##### ### #", "#     # #         #   #   #   #", "### # ### ### ### # # # ### ###", "#   # #     # #   # # #   #   #", "# ### ### # # ### # # # # # # #", "# #   #   # #   # # # # # # #  ", "###############################"]}];
+
+// ---- Constantes de la spec (4.1, 4.2, 8) ----
+const N = 15, C = 40, M = 20, GP = 4, PX = 640, ANCHO = 920, ALTO = 740;
+const DIST_MIN = 6, META = [14, 14];
+const COL = {
+  pared: '#000', entrada: 'rgb(210,225,255)', meta: 'rgb(200,240,200)', jug: 'rgb(30,90,220)', fan: 'rgb(140,60,200)',
+  pila: 'rgb(255,190,90)', desc: 'rgb(230,200,200)', cima: 'rgb(220,110,0)', camino: 'rgb(255,150,30)', tarro: 'rgb(120,120,120)'
+};
+const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // arriba, derecha, abajo, izquierda
+const FUENTE = '"Fredoka", "Trebuchet MS", sans-serif';
+
+const cv = document.getElementById('lienzo'), g = cv.getContext('2d');
+const k = p => p[0] + ',' + p[1];
+const igual = (a, b) => a && b && a[0] === b[0] && a[1] === b[1];
+
+function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+let rnd = Math.random;
+const randint = (a, b) => a + Math.floor(rnd() * (b - a + 1));
+
+// ---- Laberinto (4.3) ----
+function generarBacktracking() {
+  const gr = Array.from({ length: 2 * N + 1 }, () => Array(2 * N + 1).fill('#'));
+  const vis = new Set(['0,0']), pila = [[0, 0]];
+  gr[1][1] = ' ';
+  while (pila.length) {
+    const [x, y] = pila[pila.length - 1];
+    const libres = DIRS.map(([dx, dy]) => [x + dx, y + dy]).filter(([a, b]) => a >= 0 && b >= 0 && a < N && b < N && !vis.has(a + ',' + b));
+    if (!libres.length) { pila.pop(); continue; }
+    const [a, b] = libres[Math.floor(rnd() * libres.length)];
+    gr[y + b + 1][x + a + 1] = ' '; gr[2 * b + 1][2 * a + 1] = ' ';
+    vis.add(a + ',' + b); pila.push([a, b]);
+  }
+  gr[1][0] = ' '; gr[2 * N - 1][2 * N] = ' ';
+  return gr.map(r => r.join(''));
+}
+let G = null; // grid actual
+const abierto = (a, b) => G[a[1] + b[1] + 1][a[0] + b[0] + 1] === ' ';
+const vecinos = c => DIRS.map(([dx, dy]) => [c[0] + dx, c[1] + dy]).filter(n => n[0] >= 0 && n[1] >= 0 && n[0] < N && n[1] < N && abierto(c, n));
+
+// ---- Backtracking con traza (7.3) ----
+function buscarConTraza(o, d) {
+  const pila = [o], vis = new Set([k(o)]), ev = [{ t: 'apilar', c: o, pila: [o] }];
+  while (pila.length) {
+    const a = pila[pila.length - 1];
+    if (igual(a, d)) { ev.push({ t: 'encontrado', c: d, pila: pila.slice() }); return { camino: pila.slice(1), ev }; }
+    const v = vecinos(a).find(n => !vis.has(k(n)));
+    if (v) { pila.push(v); vis.add(k(v)); ev.push({ t: 'apilar', c: v, pila: pila.slice() }); }
+    else { pila.pop(); ev.push({ t: 'desapilar', c: a, pila: pila.slice() }); }
+  }
+  throw new Error('sin camino');
+}
+function distancias(o) {
+  const d = new Map([[k(o), 0]]), q = [o];
+  while (q.length) { const a = q.shift(); for (const n of vecinos(a)) if (!d.has(k(n))) { d.set(k(n), d.get(k(a)) + 1); q.push(n); } }
+  return d;
+}
+
+// ---- Estado ----
+const S = { fase: 'INICIO', modo: 'generado', vis: true, ultimoPredef: -1 };
+
+function nuevaPartida() {
+  S.semilla = Math.floor(Math.random() * 1e6);
+  rnd = mulberry32(S.semilla);
+  if (S.modo === 'generado') { G = generarBacktracking(); S.origen = 'Laberinto: generado #' + S.semilla; }
+  else {
+    const ops = PREDEF.map((_, i) => i).filter(i => i !== S.ultimoPredef);
+    const i = ops[Math.floor(rnd() * ops.length)];
+    S.ultimoPredef = i; G = PREDEF[i].grid; S.origen = `Laberinto: predefinido ${PREDEF[i].id} (${PREDEF[i].nombre})`;
+  }
+  Object.assign(S, { jug: [0, 0], fan: null, fanDir: [1, 0], turno: 1, dadoJ: null, dadoF: null, pasos: 0, t: 0, marcas: null, rep: null, aviso: '' });
+  S.fase = 'JUG_TIRAR';
+}
+
+function limpiarMarcas() { S.marcas = null; S.rep = null; }
+
+function finTurnoJugador() {
+  if (!S.fan) {
+    const d = distancias(S.jug);
+    const cand = [];
+    for (let f = 0; f < N; f++) for (let c = 0; c < N; c++) if ((d.get(c + ',' + f) ?? 0) >= DIST_MIN && !igual([c, f], META)) cand.push([c, f]);
+    S.fan = cand[Math.floor(rnd() * cand.length)];
+    S.fase = 'APARECE'; S.t = 0;
+  } else tirarFantasma();
+}
+function tirarFantasma() { S.dadoF = randint(1, 6); S.fase = 'DADO_F'; S.t = 0; }
+
+function iniciarBusqueda() {
+  const { camino, ev } = buscarConTraza(S.fan, S.jug);
+  S.caminoF = camino;
+  S.rep = { ev, idx: 0, acc: 0, pausa: false, vel: 1, estado: new Map(), apil: 0, desap: 0, max: 0, pila: [], msg: '', anim: null, hecho: false, hold: 0 };
+  S.marcas = S.rep.estado;
+  if (!S.vis) { while (S.rep.idx < ev.length) aplicarEvento(); S.rep.anim = null; }
+  S.fase = 'BUSCA';
+}
+function intervalo() { return Math.max(0.03, 4.0 / S.rep.ev.length) / S.rep.vel; }
+function aplicarEvento() {
+  const r = S.rep, e = r.ev[r.idx++];
+  r.pila = e.pila;
+  if (e.t === 'apilar') { r.estado.set(k(e.c), 'en_pila'); r.apil++; r.max = Math.max(r.max, e.pila.length); r.msg = r.idx === 1 ? `Apilar (${e.c}): el fantasma empieza aquí` : `Apilar (${e.c}): avanzo a un vecino libre`; r.anim = { t: 'in', c: e.c, s: 0 }; }
+  else if (e.t === 'desapilar') { r.estado.set(k(e.c), 'descartada'); r.desap++; r.msg = `Desapilar (${e.c}): sin salida, retrocedo`; r.anim = { t: 'out', c: e.c, s: 0, i: e.pila.length }; }
+  else { for (const c of e.pila) r.estado.set(k(c), 'camino'); r.hecho = true; r.msg = `¡Encontrado! Camino de ${e.pila.length - 1} pasos`; r.anim = null; }
+}
+function pasoFantasma() {
+  const sig = S.caminoF.shift();
+  S.fanDir = [sig[0] - S.fan[0], sig[1] - S.fan[1]]; S.fan = sig; S.pasosF--;
+  if (igual(S.fan, S.jug)) { S.fase = 'DERROTA'; return; }
+  if (S.pasosF === 0) { S.turno++; S.fase = 'JUG_TIRAR'; }
+}
+
+// ---- Entrada ----
+function tecla(key) {
+  const f = S.fase;
+  if (f === 'INICIO') {
+    if (key === 'g' || key === 'G') S.modo = S.modo === 'generado' ? 'predefinido' : 'generado';
+    if (key === 'v' || key === 'V') S.vis = !S.vis;
+    if (key === 'Enter') nuevaPartida();
+    return;
+  }
+  if (key === 'Escape') { S.fase = 'INICIO'; return; }
+  if (f === 'VICTORIA' || f === 'DERROTA') {
+    if (key === 'r' || key === 'R') nuevaPartida();
+    if (key === 'm' || key === 'M') S.fase = 'INICIO';
+    return;
+  }
+  if (f === 'JUG_TIRAR' && key === ' ') { limpiarMarcas(); S.dadoJ = randint(1, 6); S.fase = 'DADO_J'; S.t = 0; return; }
+  if (f === 'JUG_MOVER') {
+    if (key === 'Enter') { finTurnoJugador(); return; }
+    const d = { ArrowUp: [0, -1], ArrowRight: [1, 0], ArrowDown: [0, 1], ArrowLeft: [-1, 0] }[key];
+    if (!d || S.pasos <= 0) return;
+    const n = [S.jug[0] + d[0], S.jug[1] + d[1]];
+    if (n[0] < 0 || n[1] < 0 || n[0] >= N || n[1] >= N || !abierto(S.jug, n)) return; // RJ-1
+    S.jug = n; S.pasos--;
+    if (igual(n, META)) { S.fase = 'VICTORIA'; return; }        // RJ-4
+    if (igual(n, S.fan)) { S.fase = 'DERROTA'; return; }        // RJ-5
+    if (S.pasos === 0) finTurnoJugador();
+    return;
+  }
+  if (f === 'BUSCA' && S.rep && !S.rep.hecho) {
+    const r = S.rep;
+    if (key === 'p' || key === 'P') r.pausa = !r.pausa;
+    if ((key === 'n' || key === 'N') && r.pausa && r.idx < r.ev.length) aplicarEvento();
+    if (key === 's' || key === 'S') { while (r.idx < r.ev.length) aplicarEvento(); r.anim = null; }
+    if (key === '+' || key === '=') r.vel = Math.min(4, r.vel * 2);
+    if (key === '-') r.vel = Math.max(0.25, r.vel / 2);
+  }
+}
+addEventListener('keydown', e => {
+  if ([' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) && e.target.tagName !== 'BUTTON') e.preventDefault();
+  if (e.target.tagName === 'BUTTON' && (e.key === 'Enter' || e.key === ' ')) return;
+  tecla(e.key);
+});
+document.querySelectorAll('[data-k]').forEach(b => b.addEventListener('click', () => { tecla(b.dataset.k); cv.focus({ preventScroll: true }); }));
+
+// ---- Actualización ----
+function actualizar(dt) {
+  S.t += dt;
+  switch (S.fase) {
+    case 'DADO_J': if (S.t >= 0.6) { S.pasos = S.dadoJ; S.fase = 'JUG_MOVER'; } break;
+    case 'APARECE':
+      if (S.t >= 1) { if (igual(S.fan, S.jug)) S.fase = 'DERROTA'; else tirarFantasma(); } break;
+    case 'DADO_F': if (S.t >= 0.6) iniciarBusqueda(); break;
+    case 'BUSCA': {
+      const r = S.rep;
+      if (r.anim) r.anim.s += dt;
+      if (!r.hecho) {
+        if (!r.pausa) { r.acc += dt; while (r.acc >= intervalo() && r.idx < r.ev.length) { r.acc -= intervalo(); aplicarEvento(); } }
+      } else if ((r.hold += dt) >= 0.6) { S.pasosF = Math.min(S.dadoF, S.caminoF.length); S.fase = 'F_MOVER'; S.t = 0; if (S.pasosF === 0) { S.turno++; S.fase = 'JUG_TIRAR'; } }
+      break;
+    }
+    case 'F_MOVER': if (S.t >= 0.25) { S.t -= 0.25; pasoFantasma(); } break;
+  }
+}
+
+// ---- Dibujo ----
+const cx = c => M + c * C, cy = f => M + f * C;
+function texto(s, x, y, tam = 16, col = '#000', al = 'left', peso = 500) { g.font = `${peso} ${tam}px ${FUENTE}`; g.fillStyle = col; g.textAlign = al; g.textBaseline = 'middle'; g.fillText(s, x, y); }
+
+function dibujarTablero() {
+  g.fillStyle = COL.entrada; g.fillRect(cx(0), cy(0), C, C);
+  g.fillStyle = COL.meta; g.fillRect(cx(14), cy(14), C, C);
+  if (S.marcas) for (const [key, est] of S.marcas) {
+    const [c, f] = key.split(',').map(Number);
+    g.fillStyle = est === 'en_pila' ? COL.pila : est === 'camino' ? COL.camino : COL.desc;
+    g.fillRect(cx(c) + 2, cy(f) + 2, C - 4, C - 4);
+  }
+  if (S.rep && !S.rep.hecho && S.rep.pila.length) {
+    const t = S.rep.pila[S.rep.pila.length - 1];
+    g.strokeStyle = COL.cima; g.lineWidth = 3; g.strokeRect(cx(t[0]) + 4, cy(t[1]) + 4, C - 8, C - 8);
+  }
+  texto('META', cx(14) + C / 2, cy(14) + C / 2, 11, '#2d6a2d', 'center', 600);
+  g.strokeStyle = COL.pared; g.lineWidth = GP; g.lineCap = 'square'; g.beginPath();
+  const seg = (x1, y1, x2, y2) => { g.moveTo(cx(x1), cy(y1)); g.lineTo(cx(x2), cy(y2)); };
+  for (let f = 0; f <= N; f++) for (let c = 0; c < N; c++) if (G[2 * f][2 * c + 1] === '#') seg(c, f, c + 1, f);
+  for (let f = 0; f < N; f++) for (let c = 0; c <= N; c++) if (G[2 * f + 1][2 * c] === '#') seg(c, f, c, f + 1);
+  g.stroke();
+}
+
+function dibujarJugador(p) {
+  const x = cx(p[0]) + C / 2, y = cy(p[1]) + C / 2;
+  g.fillStyle = COL.jug; g.beginPath(); g.arc(x, y, 14, 0, 7); g.fill();
+  for (const dx of [-5, 5]) { g.fillStyle = '#fff'; g.beginPath(); g.arc(x + dx, y - 3, 3, 0, 7); g.fill(); g.fillStyle = '#000'; g.beginPath(); g.arc(x + dx, y - 3, 1.4, 0, 7); g.fill(); }
+}
+function dibujarFantasma(p, dir, alfa = 1) {
+  const x = cx(p[0]) + C / 2, y = cy(p[1]) + C / 2, w = 30, h = 32, top = y - h / 2, l = x - w / 2;
+  g.globalAlpha = alfa; g.fillStyle = COL.fan; g.beginPath();
+  g.arc(x, top + w / 2, w / 2, Math.PI, 0);
+  g.lineTo(l + w, top + h);
+  for (let i = 3; i > 0; i--) { const xb = l + (i - 1) * w / 3; g.quadraticCurveTo(xb + w / 6, top + h - 8, xb, top + h); }
+  g.closePath(); g.fill();
+  for (const dx of [-6, 6]) {
+    g.fillStyle = '#fff'; g.beginPath(); g.arc(x + dx, top + 13, 4.5, 0, 7); g.fill();
+    g.fillStyle = '#000'; g.beginPath(); g.arc(x + dx + dir[0] * 2, top + 13 + dir[1] * 2, 2, 0, 7); g.fill();
+  }
+  g.globalAlpha = 1;
+}
+
+function dibujarTarro() {
+  const mid = PX + 140;
+  texto('Pila del backtracking', mid, 22, 17, '#000', 'center', 600);
+  const L = mid - 80, R = mid + 80, T = 60, B = 520;
+  g.strokeStyle = COL.tarro; g.lineWidth = 3; g.lineJoin = 'round'; g.beginPath();
+  g.moveTo(L - 10, T); g.lineTo(L, T + 8); g.lineTo(L, B - 16); g.arcTo(L, B, L + 16, B, 16); g.lineTo(R - 16, B); g.arcTo(R, B, R, B - 16, 16); g.lineTo(R, T + 8); g.lineTo(R + 10, T);
+  g.stroke();
+  const r = S.rep;
+  if (!r) {
+    texto(S.fan ? 'La pila se llena en el turno del fantasma' : 'Esperando al fantasma…', mid, 290, 13, '#666', 'center');
+  } else {
+    const pila = r.pila, n = pila.length, vis = n > 20 ? 19 : n, base = n - vis;
+    const topY = i => B - 4 - (i + 1) * 22;
+    const bloque = (i, etiqueta, fondo, borde) => { const y = topY(i); g.fillStyle = fondo; g.fillRect(L + 10, y, 140, 20); if (borde) { g.strokeStyle = borde; g.lineWidth = 3; g.strokeRect(L + 10, y, 140, 20); } texto(etiqueta, mid, y + 10, 13, '#000', 'center'); };
+    const parpadeo = r.hecho && Math.floor(r.hold / 0.15) % 2 === 0;
+    let off = 0;
+    if (n > 20) { bloque(0, `… +${base} más`, '#e6e6e6'); off = 1; }
+    for (let j = 0; j < vis; j++) {
+      const idx = base + j, c = pila[idx], esCima = idx === n - 1;
+      const fondo = r.hecho ? (parpadeo ? '#fff3df' : COL.camino) : COL.pila;
+      const et = idx === 0 ? `(${c}) inicio` : `(${c})`;
+      if (esCima && r.anim && r.anim.t === 'in') {
+        const p = Math.min(1, r.anim.s / Math.min(0.12, intervalo()));
+        const y0 = 34, yf = topY(j + off); const y = y0 + (yf - y0) * p;
+        g.fillStyle = fondo; g.fillRect(L + 10, y, 140, 20); g.strokeStyle = COL.cima; g.lineWidth = 3; g.strokeRect(L + 10, y, 140, 20); texto(et, mid, y + 10, 13, '#000', 'center');
+      } else bloque(j + off, et, fondo, esCima && !r.hecho ? COL.cima : null);
+    }
+    if (r.anim && r.anim.t === 'out') {
+      const p = Math.min(1, r.anim.s / Math.min(0.12, intervalo()));
+      const slot = Math.min(r.anim.i, 19) + (n > 20 ? 1 : 0), y = topY(slot) - 40 * p;
+      g.globalAlpha = 1 - p; g.fillStyle = 'rgb(250,170,170)'; g.fillRect(L + 10, y, 140, 20); texto(`(${r.anim.c})`, mid, y + 10, 13, '#000', 'center'); g.globalAlpha = 1;
+    }
+    if (n && !r.hecho) { const y = topY(Math.min(n - 1, 19) + (n > 20 && vis === 19 ? 1 : 0)) + 10; texto('← cima', R + 6, y, 12, COL.cima, 'left', 600); }
+    texto(`Apilados: ${r.apil}`, L - 30, 540, 13); texto(`Desapilados: ${r.desap}`, R + 30, 540, 13, '#000', 'right');
+    texto(`Profundidad: ${n}`, L - 30, 560, 13); texto(`Máxima: ${r.max}`, R + 30, 560, 13, '#000', 'right');
+    texto(`Evento ${r.idx}/${r.ev.length} · vel ×${r.vel}${r.pausa ? ' · PAUSA' : ''}`, mid, 582, 12, '#666', 'center');
+    g.font = `500 13px ${FUENTE}`; const palabras = r.msg.split(' '); let linea = '', yy = 604;
+    for (const w of palabras) { if (g.measureText(linea + w).width > 250) { texto(linea, mid, yy, 13, '#000', 'center'); linea = ''; yy += 17; } linea += w + ' '; }
+    texto(linea, mid, yy, 13, r.hecho ? '#b35c00' : '#000', 'center', r.hecho ? 600 : 500);
+  }
+}
+
+const PIPS = { 1: [[1, 1]], 2: [[0, 0], [2, 2]], 3: [[0, 0], [1, 1], [2, 2]], 4: [[0, 0], [2, 0], [0, 2], [2, 2]], 5: [[0, 0], [2, 0], [1, 1], [0, 2], [2, 2]], 6: [[0, 0], [2, 0], [0, 1], [2, 1], [0, 2], [2, 2]] };
+function dibujarDado(x, y, v, etiqueta, col) {
+  g.fillStyle = '#fff'; g.fillRect(x, y, 60, 60); g.strokeStyle = '#000'; g.lineWidth = 3; g.strokeRect(x, y, 60, 60);
+  if (v) { g.fillStyle = '#000'; for (const [a, b] of PIPS[v]) { g.beginPath(); g.arc(x + 15 + a * 15, y + 15 + b * 15, 5, 0, 7); g.fill(); } }
+  texto(etiqueta, x + 30, y + 72, 12, col, 'center', 600);
+}
+function dibujarHUD() {
+  g.strokeStyle = '#ccc'; g.lineWidth = 1; g.beginPath(); g.moveTo(0, 640.5); g.lineTo(ANCHO, 640.5); g.stroke();
+  texto(`Turno: ${S.turno}`, 20, 668, 18, '#000', 'left', 600);
+  texto(S.origen, 20, 700, 12, '#555');
+  const caraAnim = () => 1 + Math.floor(Math.random() * 6);
+  const vJ = S.fase === 'DADO_J' ? (Math.floor(S.t / 0.06) % 2 ? caraAnim() : caraAnim()) : S.dadoJ;
+  const vF = S.fase === 'DADO_F' ? caraAnim() : S.dadoF;
+  dibujarDado(200, 650, vJ, 'Jugador', COL.jug);
+  dibujarDado(280, 650, vF, 'Fantasma', COL.fan);
+  const st = {
+    JUG_TIRAR: 'Tu turno: pulsa ESPACIO para tirar',
+    DADO_J: 'Tirando el dado…',
+    JUG_MOVER: `Mueve con las flechas: quedan ${S.pasos} pasos · ENTER para terminar`,
+    APARECE: '¡Apareció el fantasma!',
+    DADO_F: 'El fantasma tira el dado…',
+    BUSCA: 'El fantasma busca tu rastro…  (P pausa · N paso · S saltar · +/- velocidad)',
+    F_MOVER: 'El fantasma avanza…'
+  }[S.fase] || '';
+  g.font = `500 15px ${FUENTE}`; const partes = st.split('  ');
+  texto(partes[0], 365, 672, 15, S.fase === 'APARECE' ? COL.fan : '#000', 'left', 600);
+  if (partes[1]) texto(partes[1], 365, 698, 12, '#555');
+}
+
+function capa(titulo, color, sub) {
+  g.fillStyle = 'rgba(0,0,0,0.63)'; g.fillRect(0, 0, ANCHO, ALTO);
+  texto(titulo, ANCHO / 2, 320, 64, color, 'center', 600);
+  texto(sub, ANCHO / 2, 380, 20, '#fff', 'center');
+  texto('R: jugar de nuevo (laberinto nuevo)   ·   M: menú', ANCHO / 2, 420, 16, '#ddd', 'center');
+}
+function dibujarInicio() {
+  g.fillStyle = '#fff'; g.fillRect(0, 0, ANCHO, ALTO);
+  dibujarFantasma([10.5, 3.3], [-1, 0]); dibujarJugador([7.5, 3.3]);
+  texto('El Laberinto del Fantasma', ANCHO / 2, 250, 44, '#000', 'center', 600);
+  texto('Llega a la META antes de que el fantasma te alcance.', ANCHO / 2, 300, 18, '#444', 'center');
+  texto(`G: laberinto [${S.modo === 'generado' ? 'GENERADO' : 'PREDEFINIDO AL AZAR'}]`, ANCHO / 2, 380, 20, '#000', 'center');
+  texto(`V: visualizador de backtracking [${S.vis ? 'ACTIVADO' : 'DESACTIVADO'}]`, ANCHO / 2, 415, 20, '#000', 'center');
+  texto('ENTER para comenzar', ANCHO / 2, 490, 24, COL.jug, 'center', 600);
+}
+
+function render() {
+  g.fillStyle = '#fff'; g.fillRect(0, 0, ANCHO, ALTO);
+  if (S.fase === 'INICIO') return dibujarInicio();
+  dibujarTablero();
+  dibujarJugador(S.jug);
+  if (S.fan) {
+    if (S.fase === 'APARECE') { g.fillStyle = `rgba(140,60,200,${0.35 * (1 - S.t)})`; g.beginPath(); g.arc(cx(S.fan[0]) + C / 2, cy(S.fan[1]) + C / 2, 20 + 30 * S.t, 0, 7); g.fill(); }
+    dibujarFantasma(S.fan, S.fanDir, S.fase === 'APARECE' ? Math.min(1, S.t * 2) : 1);
+  }
+  dibujarTarro();
+  dibujarHUD();
+  if (S.fase === 'VICTORIA') capa('¡HAS GANADO!', 'rgb(90,220,110)', `Llegaste a la meta en ${S.turno} turnos`);
+  if (S.fase === 'DERROTA') capa('GAME OVER', 'rgb(240,70,70)', 'El fantasma te atrapó');
+}
+
+let prev = performance.now();
+function bucle(t) { const dt = Math.min(0.1, (t - prev) / 1000); prev = t; actualizar(dt); render(); requestAnimationFrame(bucle); }
+requestAnimationFrame(bucle);
+cv.focus({ preventScroll: true });
+</script>
